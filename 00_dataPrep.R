@@ -10,64 +10,64 @@ library(readxl)
 
 ## Download data from movebank
 # download data from movebank (just a subset of the times for now)
-# base::load("movebankCredentials/pw.Rda")
-# MB.LoginObject <- move::movebankLogin(username = "kaijagahm", password = pw)
-# rm(pw)
+base::load("movebankCredentials/pw.Rda")
+MB.LoginObject <- move::movebankLogin(username = "kaijagahm", password = pw)
+rm(pw)
 
-# dat <- vultureUtils::downloadVultures(loginObject = MB.LoginObject, removeDup = T, dfConvert = T, quiet = T, dateTimeStartUTC = "2021-12-01 00:00", dateTimeEndUTC = "2023-03-31 11:59")
-# write_feather(dat, "data/dat.feather")
-# dat <- read_feather("data/dat.feather")
-# ## fix trackId
-# dat <- dat %>%
-#   mutate(trackId = as.character(trackId),
-#          trackId = case_when(trackId == "E03" ~ "E03w",
-#                              TRUE ~ trackId))
-# 
-# # Add the Nili_id
-# ww <- read_excel("data/whoswho_vultures_20230315_new.xlsx", sheet = "all gps tags")[,1:35] %>%
-#   dplyr::select(Nili_id, Movebank_id) %>%
-#   distinct()
-# 
-# all(dat$trackId %in% ww$Movebank_id) # true
-# 
-# dat2 <- left_join(dat, ww, by = c("trackId" = "Movebank_id"))
-# 
-# ## annotate the data with periods to remove
-# toRemove <- read_excel("data/whoswho_vultures_20230315_new.xlsx", sheet = "periods_to_remove")
-# 
-# toRemove <- toRemove %>%
-#   dplyr::select(Nili_id,
-#                 "trackId" = Movebank_id,
-#                 remove_start,
-#                 remove_end,
-#                 reason) %>%
-#   mutate(across(c(remove_start, remove_end), .fns = function(x){
-#     lubridate::ymd(x)
-#   })) %>%
-#   dplyr::filter(!is.na(remove_end))
-# 
-# toRemove_long <- toRemove %>%
-#   group_by(Nili_id, reason) %>%
-#   # sequence of daily dates for each corresponding start, end elements
-#   dplyr::mutate(dateOnly = map2(remove_start, remove_end, seq, by = "1 day")) %>%
-#   # unnest the list column
-#   unnest(cols = c(dateOnly)) %>% 
-#   # remove any duplicate rows
-#   distinct() %>%
-#   dplyr::select(-c(remove_start, remove_end)) %>%
-#   rename("status" = reason)
-# 
-# # Join to the original data
-# datAnnot <- dat2 %>%
-#   left_join(toRemove_long, by = c("Nili_id", "dateOnly")) %>%
-#   mutate(status = replace_na(status, "valid"))
-# nrow(datAnnot) == nrow(dat2) #T
-# 
-# # Clean the data
-# ## Region masking, downsampling, removal of speed outliers, setting altitude outliers to NA, etc.
-# mask <- sf::st_read("data/CutOffRegion.kml")
-# datAnnotCleaned <- vultureUtils::cleanData(dataset = datAnnot, mask = mask, inMaskThreshold = 0.33, removeVars = F, idCol = "Nili_id", downsample = T)
-# save(datAnnotCleaned, file = "data/datAnnotCleaned.Rda")
+dat <- vultureUtils::downloadVultures(loginObject = MB.LoginObject, removeDup = T, dfConvert = T, quiet = T, dateTimeStartUTC = "2020-09-01 00:00", dateTimeEndUTC = "2021-11-30 11:59") # 2020 through the 2022 nb season. We don't have the full 2023 breeding season yet.
+write_feather(dat, "data/dat.feather")
+dat <- read_feather("data/dat.feather")
+## fix trackId
+dat <- dat %>%
+  mutate(trackId = as.character(trackId),
+         trackId = case_when(trackId == "E03" ~ "E03w",
+                             TRUE ~ trackId))
+
+# Add the Nili_id
+ww <- read_excel("data/whoswho_vultures_20230315_new.xlsx", sheet = "all gps tags")[,1:35] %>%
+  dplyr::select(Nili_id, Movebank_id) %>%
+  distinct()
+
+all(dat$trackId %in% ww$Movebank_id) # true
+
+dat2 <- left_join(dat, ww, by = c("trackId" = "Movebank_id"))
+
+## annotate the data with periods to remove
+toRemove <- read_excel("data/whoswho_vultures_20230315_new.xlsx", sheet = "periods_to_remove")
+
+toRemove <- toRemove %>%
+  dplyr::select(Nili_id,
+                "trackId" = Movebank_id,
+                remove_start,
+                remove_end,
+                reason) %>%
+  mutate(across(c(remove_start, remove_end), .fns = function(x){
+    lubridate::ymd(x)
+  })) %>%
+  dplyr::filter(!is.na(remove_end))
+
+toRemove_long <- toRemove %>%
+  group_by(Nili_id, reason) %>%
+  # sequence of daily dates for each corresponding start, end elements
+  dplyr::mutate(dateOnly = map2(remove_start, remove_end, seq, by = "1 day")) %>%
+  # unnest the list column
+  unnest(cols = c(dateOnly)) %>%
+  # remove any duplicate rows
+  distinct() %>%
+  dplyr::select(-c(remove_start, remove_end)) %>%
+  rename("status" = reason)
+
+# Join to the original data
+datAnnot <- dat2 %>%
+  left_join(toRemove_long, by = c("Nili_id", "dateOnly")) %>%
+  mutate(status = replace_na(status, "valid"))
+nrow(datAnnot) == nrow(dat2) #T
+
+# Clean the data
+## Region masking, downsampling, removal of speed outliers, setting altitude outliers to NA, etc.
+mask <- sf::st_read("data/CutOffRegion.kml")
+datAnnotCleaned <- vultureUtils::cleanData(dataset = datAnnot, mask = mask, inMaskThreshold = 0.33, removeVars = F, idCol = "Nili_id", downsample = F)
+save(datAnnotCleaned, file = "data/datAnnotCleaned.Rda")
 
 ## Load data ---------------------------------------------------------------
 load("data/datAnnotCleaned.Rda")
